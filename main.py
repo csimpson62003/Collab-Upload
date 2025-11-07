@@ -1,3 +1,6 @@
+# import sys
+# sys.path.append('/content/Collab-Upload')
+
 """
 FACE-SWAPPING DIFFUSION MODEL - MAIN ENTRY POINT
 ===============================================

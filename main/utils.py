@@ -11,6 +11,14 @@ import matplotlib.pyplot as plt
 from einops import rearrange
 from typing import List
 
+# TPU support for Google Colab
+try:
+    import torch_xla
+    import torch_xla.core.xla_model as xm
+    TPU_AVAILABLE = True
+except ImportError:
+    TPU_AVAILABLE = False
+
 
 def set_seed(seed: int = 42):
     """
@@ -40,61 +48,71 @@ def set_seed(seed: int = 42):
 
 
 def setup_cuda_device(preferred_gpu: int = 0):
-    # """
-    # CUDA SETUP AND DEVICE SELECTION
-    # ===============================
-    # Sets up CUDA and selects the best available GPU device.
+    """
+    DEVICE SETUP - SUPPORTS TPU, CUDA GPU, AND CPU
+    ==============================================
+    Automatically detects and sets up the best available device:
+    1. TPU (Google Colab TPU runtime)
+    2. CUDA GPU (NVIDIA GPUs)
+    3. CPU (fallback)
     
-    # Args:
-    #     preferred_gpu: Which GPU to prefer (0 for first GPU, 1 for second, etc.)
-    # Returns:
-    #     torch.device: The selected device (cuda:X or cpu)
-    # """
-    # print("=" * 50)
-    # print("CUDA SETUP AND DETECTION")
-    # print("=" * 50)
+    Args:
+        preferred_gpu: Which GPU to prefer if multiple CUDA GPUs available
+    Returns:
+        torch.device: The selected device (xla for TPU, cuda:X for GPU, or cpu)
+    """
+    print("=" * 50)
+    print("DEVICE SETUP AND DETECTION")
+    print("=" * 50)
     
-    # # Check CUDA availability
-    # print(f"CUDA available: {torch.cuda.is_available()}")
+    # PRIORITY 1: Check for TPU (Google Colab)
+    if TPU_AVAILABLE:
+        try:
+            device = xm.xla_device()
+            print("✅ TPU DETECTED AND ACTIVATED!")
+            print(f"   Device: {device}")
+            print(f"   TPU cores: {xm.xrt_world_size()}")
+            print("💡 For optimal TPU performance:")
+            print("   - Use batch sizes that are multiples of 8")
+            print("   - Avoid frequent CPU<->TPU transfers")
+            print("   - Use XLA-compatible operations")
+            return device
+        except Exception as e:
+            print(f"⚠️  TPU initialization failed: {e}")
+            print("   Falling back to CUDA/CPU...")
     
-    # if not torch.cuda.is_available():
-    #     print("⚠️  CUDA not available! Using CPU instead.")
-    #     print("💡 To enable CUDA:")
-    #     print("   1. Make sure you have an NVIDIA GPU")
-    #     print("   2. Install CUDA drivers from NVIDIA")
-    #     print("   3. Install PyTorch with CUDA support:")
-    #     print("      pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
-    #     return torch.device("cpu")
+    # PRIORITY 2: Check for CUDA GPU
+    if torch.cuda.is_available():
+        print(f"✅ CUDA GPU AVAILABLE")
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"Number of GPUs: {torch.cuda.device_count()}")
+        
+        # List all available GPUs
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            memory_gb = props.total_memory / 1024**3
+            print(f"  GPU {i}: {props.name} ({memory_gb:.1f} GB)")
+        
+        # Select GPU
+        if preferred_gpu < torch.cuda.device_count():
+            selected_gpu = preferred_gpu
+        else:
+            selected_gpu = 0
+            print(f"⚠️  Preferred GPU {preferred_gpu} not available, using GPU 0")
+        
+        torch.cuda.set_device(selected_gpu)
+        device = torch.device(f"cuda:{selected_gpu}")
+        print(f"✅ Using GPU {selected_gpu}: {torch.cuda.get_device_name(selected_gpu)}")
+        return device
     
-    # # Display CUDA information
-    # print(f"CUDA version: {torch.version.cuda}")
-    # print(f"cuDNN version: {torch.backends.cudnn.version()}")
-    # print(f"Number of GPUs available: {torch.cuda.device_count()}")
-    
-    # # List all available GPUs
-    # for i in range(torch.cuda.device_count()):
-    #     props = torch.cuda.get_device_properties(i)
-    #     memory_gb = props.total_memory / 1024**3
-    #     print(f"  GPU {i}: {props.name}")
-    #     print(f"    Memory: {memory_gb:.1f} GB")
-    #     print(f"    Compute Capability: {props.major}.{props.minor}")
-    
-    # # Select the best GPU
-    # if preferred_gpu < torch.cuda.device_count():
-    #     selected_gpu = preferred_gpu
-    # else:
-    #     # Default to GPU 0 if preferred GPU doesn't exist
-    #     selected_gpu = 0
-    #     print(f"⚠️  Preferred GPU {preferred_gpu} not available, using GPU {selected_gpu}")
-    
-    # # Set the default GPU
-    # torch.cuda.set_device(selected_gpu)
-    # device = torch.device(f"cuda:{selected_gpu}")
-    
-    # print(f"✅ Selected GPU {selected_gpu}: {torch.cuda.get_device_name(selected_gpu)}")
-    # print(f"   Device: {device}")
-   
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # PRIORITY 3: Fallback to CPU
+    print("⚠️  No GPU/TPU detected! Using CPU (this will be VERY slow)")
+    print("💡 To enable hardware acceleration:")
+    print("   - For TPU in Colab: Runtime > Change runtime type > TPU")
+    print("   - For GPU in Colab: Runtime > Change runtime type > GPU")
+    print("   - For local GPU: Install CUDA drivers and PyTorch with CUDA support")
+    return torch.device("cpu")
+
 
 
 

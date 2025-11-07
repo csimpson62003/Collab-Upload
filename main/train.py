@@ -37,6 +37,14 @@ from .unet import UNET
 from .ddpm_scheduler import DDPM_Scheduler
 from .utils import set_seed, setup_cuda_device
 
+# TPU support
+try:
+    import torch_xla.core.xla_model as xm
+    import torch_xla.distributed.parallel_loader as pl
+    TPU_AVAILABLE = True
+except ImportError:
+    TPU_AVAILABLE = False
+
 
 def train(batch_size: int=64,
       num_time_steps: int=1000,

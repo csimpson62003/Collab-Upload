@@ -5,3 +5,4 @@ timm
 tqdm
 matplotlib
 numpy
+torch_xla
