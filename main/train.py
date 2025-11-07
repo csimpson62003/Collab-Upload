@@ -37,14 +37,6 @@ from .unet import UNET
 from .ddpm_scheduler import DDPM_Scheduler
 from .utils import set_seed, setup_cuda_device
 
-# TPU support
-try:
-    import torch_xla.core.xla_model as xm
-    import torch_xla.distributed.parallel_loader as pl
-    TPU_AVAILABLE = True
-except ImportError:
-    TPU_AVAILABLE = False
-
 
 def train(batch_size: int=64,
       num_time_steps: int=1000,
@@ -80,12 +72,7 @@ def train(batch_size: int=64,
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=0)
 
     # STEP 3: SET UP GPU/CPU DEVICE
-    device = setup_cuda_device(preferred_gpu=0)  # Automatically detects TPU, GPU, or CPU
-    is_tpu = TPU_AVAILABLE and str(device).startswith('xla')
-    
-    if is_tpu:
-        print("\n🚀 TPU-OPTIMIZED TRAINING MODE ACTIVATED")
-        print("   Using XLA optimizations for maximum TPU performance")
+    device = setup_cuda_device(preferred_gpu=0)  # Use RTX 2080 Super (GPU 0)
     
     # STEP 4: INITIALIZE ALL MODEL COMPONENTS
     scheduler = DDPM_Scheduler(num_time_steps=num_time_steps)  # Noise schedule manager
@@ -113,16 +100,8 @@ def train(batch_size: int=64,
     for i in range(num_epochs):
         total_loss = 0
         
-        # TPU-optimized data loading
-        if is_tpu:
-            # Wrap dataloader for TPU efficiency
-            para_loader = pl.ParallelLoader(train_loader, [device])
-            data_iterator = para_loader.per_device_loader(device)
-        else:
-            data_iterator = train_loader
-        
         # Process each batch of face-swap data
-        for bidx, batch_data in enumerate(tqdm(data_iterator, desc=f"Epoch {i+1}/{num_epochs}")):
+        for bidx, batch_data in enumerate(tqdm(train_loader, desc=f"Epoch {i+1}/{num_epochs}")):
             # STEP 6a: EXTRACT FACE IMAGES FROM BATCH
             # Extract face images from batch dictionary
             # For face-swapping, we train the model to generate the 'altered' (face-swapped) image
@@ -160,12 +139,7 @@ def train(batch_size: int=64,
             
             # Update model weights
             loss.backward()
-            
-            if is_tpu:
-                # TPU-specific optimization step
-                xm.optimizer_step(optimizer)  # This syncs gradients across TPU cores
-            else:
-                optimizer.step()
+            optimizer.step()
             
             # Update exponential moving average (stabilizes training)
             ema.update(model)
@@ -173,37 +147,12 @@ def train(batch_size: int=64,
         # Print epoch statistics
         avg_loss = total_loss / len(train_loader)
         print(f'Epoch {i+1} | Loss {avg_loss:.5f} | Processed {len(train_dataset)} face-swap pairs')
-        
-        # TPU: Mark step completion for performance
-        if is_tpu:
-            xm.mark_step()
 
     # STEP 7: SAVE TRAINED MODEL
-    # For TPU, we need to ensure tensors are on CPU before saving
-    if is_tpu:
-        # Move model to CPU for saving
-        model_state = {k: v.cpu() for k, v in model.state_dict().items()}
-        optimizer_state = {k: v.cpu() if isinstance(v, torch.Tensor) else v 
-                          for k, v in optimizer.state_dict().items()}
-        ema_state = {k: v.cpu() if isinstance(v, torch.Tensor) else v 
-                    for k, v in ema.state_dict().items()}
-        
-        checkpoint = {
-            'weights': model_state,
-            'optimizer': optimizer_state,
-            'ema': ema_state
-        }
-    else:
-        checkpoint = {
-            'weights': model.state_dict(),      # Model parameters
-            'optimizer': optimizer.state_dict(), # Optimizer state  
-            'ema': ema.state_dict()            # EMA parameters (used for generation)
-        }
-    
-    # Create checkpoint directory if it doesn't exist
-    checkpoint_dir = os.path.dirname(checkpoint_path)
-    if checkpoint_dir and not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir, exist_ok=True)
-    
+    checkpoint = {
+        'weights': model.state_dict(),      # Model parameters
+        'optimizer': optimizer.state_dict(), # Optimizer state  
+        'ema': ema.state_dict()            # EMA parameters (used for generation)
+    }
     torch.save(checkpoint, checkpoint_path)
-    print(f"✅ Model saved to {checkpoint_path}")
+    print(f"Model saved to {checkpoint_path}")

@@ -4,36 +4,12 @@ UTILITY FUNCTIONS FOR THE DIFFUSION MODEL
 Various helper functions for setup, training, and inference.
 """
 
-import os
 import torch
 import numpy as np
 import random
 import matplotlib.pyplot as plt
 from einops import rearrange
-from typing import List, Optional
-
-os.environ["PJRT_DEVICE"] = "TPU"
-os.environ["XLA_USE_SPMD"] = "1"
-
-
-# TPU support (PJRT path). Import guarded so this file works on any runtime.
-try:
-    import torch_xla
-    import torch_xla.core.xla_model as xm
-    import torch_xla.runtime as xr
-    TPU_AVAILABLE = True
-except Exception:
-    TPU_AVAILABLE = False
-
-
-def _is_tpu_ready() -> bool:
-    """True if torch_xla is present AND PJRT reports TPU device."""
-    if not TPU_AVAILABLE:
-        return False
-    try:
-        return xr.device_type() == "TPU"
-    except Exception:
-        return False
+from typing import List
 
 
 def set_seed(seed: int = 42):
@@ -41,117 +17,109 @@ def set_seed(seed: int = 42):
     REPRODUCIBILITY SETUP
     ====================
     Sets random seeds for all libraries to ensure reproducible results.
+    Critical for scientific experiments and debugging.
+    
+    For face-swapping: Ensures consistent results when testing different
+    face-swapping configurations and comparing model performance.
     """
+    # PyTorch CPU random number generator
     torch.manual_seed(seed)
+    
+    # PyTorch GPU random number generators (all devices)
+    torch.cuda.manual_seed_all(seed)
+    
+    # Make cuDNN deterministic (slower but reproducible)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # NumPy random number generator
     np.random.seed(seed)
+    
+    # Python's built-in random module
     random.seed(seed)
-
-    # Only touch CUDA knobs if CUDA exists (keeps TPU happy)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
 
 
 def setup_cuda_device(preferred_gpu: int = 0):
-    """
-    DEVICE SETUP - SUPPORTS TPU (PJRT), CUDA GPU, AND CPU
-    =====================================================
-    Automatically selects the best available device:
-      1) TPU via torch_xla (PJRT)
-      2) CUDA GPU
-      3) CPU
-
-    Returns:
-        A device handle suitable for `.to(device)`:
-          - XLA device (TPU) when on TPU runtime
-          - torch.device("cuda:X") when on GPU
-          - torch.device("cpu") otherwise
-    """
-    print("=" * 50)
-    print("DEVICE SETUP AND DETECTION (TPU -> CUDA -> CPU)")
-    print("=" * 50)
-
-    # PRIORITY 1: TPU (PJRT)
-    if _is_tpu_ready():
-        try:
-            dev = xm.xla_device()
-            # world size via PJRT
-            try:
-                world = xr.world_size()
-            except Exception:
-                world = 1
-            print("✅ TPU detected via PJRT")
-            print(f"   XLA device: {dev}")
-            print(f"   TPU world size: {world}")
-            print("💡 Tips: use batch sizes multiple of 8; avoid frequent CPU<->TPU transfers.")
-            return dev
-        except Exception as e:
-            print(f"⚠️  TPU initialization failed: {e}")
-            print("   Falling back to CUDA/CPU...")
-
-    # PRIORITY 2: CUDA GPU
-    if torch.cuda.is_available():
-        print("✅ CUDA GPU available")
-        try:
-            print(f"   CUDA version: {torch.version.cuda}")
-        except Exception:
-            pass
-        n_gpu = torch.cuda.device_count()
-        print(f"   Number of GPUs: {n_gpu}")
-
-        for i in range(n_gpu):
-            props = torch.cuda.get_device_properties(i)
-            memory_gb = props.total_memory / 1024**3
-            print(f"   GPU {i}: {props.name} ({memory_gb:.1f} GB)")
-
-        if preferred_gpu < n_gpu:
-            selected = preferred_gpu
-        else:
-            selected = 0
-            print(f"⚠️  Preferred GPU {preferred_gpu} not available; using GPU 0")
-
-        torch.cuda.set_device(selected)
-        dev = torch.device(f"cuda:{selected}")
-        print(f"✅ Using GPU {selected}: {torch.cuda.get_device_name(selected)}")
-        return dev
-
-    # PRIORITY 3: CPU
-    print("⚠️  No TPU/GPU detected — using CPU (slow).")
-    print("💡 To accelerate:")
-    print("   - Colab TPU: Runtime > Change runtime type > TPU")
-    print("   - Colab GPU: Runtime > Change runtime type > GPU")
-    print("   - Local GPU: Install NVIDIA drivers + PyTorch w/ CUDA")
-    return torch.device("cpu")
+    # """
+    # CUDA SETUP AND DEVICE SELECTION
+    # ===============================
+    # Sets up CUDA and selects the best available GPU device.
+    
+    # Args:
+    #     preferred_gpu: Which GPU to prefer (0 for first GPU, 1 for second, etc.)
+    # Returns:
+    #     torch.device: The selected device (cuda:X or cpu)
+    # """
+    # print("=" * 50)
+    # print("CUDA SETUP AND DETECTION")
+    # print("=" * 50)
+    
+    # # Check CUDA availability
+    # print(f"CUDA available: {torch.cuda.is_available()}")
+    
+    # if not torch.cuda.is_available():
+    #     print("⚠️  CUDA not available! Using CPU instead.")
+    #     print("💡 To enable CUDA:")
+    #     print("   1. Make sure you have an NVIDIA GPU")
+    #     print("   2. Install CUDA drivers from NVIDIA")
+    #     print("   3. Install PyTorch with CUDA support:")
+    #     print("      pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
+    #     return torch.device("cpu")
+    
+    # # Display CUDA information
+    # print(f"CUDA version: {torch.version.cuda}")
+    # print(f"cuDNN version: {torch.backends.cudnn.version()}")
+    # print(f"Number of GPUs available: {torch.cuda.device_count()}")
+    
+    # # List all available GPUs
+    # for i in range(torch.cuda.device_count()):
+    #     props = torch.cuda.get_device_properties(i)
+    #     memory_gb = props.total_memory / 1024**3
+    #     print(f"  GPU {i}: {props.name}")
+    #     print(f"    Memory: {memory_gb:.1f} GB")
+    #     print(f"    Compute Capability: {props.major}.{props.minor}")
+    
+    # # Select the best GPU
+    # if preferred_gpu < torch.cuda.device_count():
+    #     selected_gpu = preferred_gpu
+    # else:
+    #     # Default to GPU 0 if preferred GPU doesn't exist
+    #     selected_gpu = 0
+    #     print(f"⚠️  Preferred GPU {preferred_gpu} not available, using GPU {selected_gpu}")
+    
+    # # Set the default GPU
+    # torch.cuda.set_device(selected_gpu)
+    # device = torch.device(f"cuda:{selected_gpu}")
+    
+    # print(f"✅ Selected GPU {selected_gpu}: {torch.cuda.get_device_name(selected_gpu)}")
+    # print(f"   Device: {device}")
+   
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def display_reverse(images: List[torch.Tensor], max_steps: Optional[int] = 10):
+
+def display_reverse(images: List):
     """
     VISUALIZATION FUNCTION FOR DIFFUSION PROCESS
     ===========================================
     Shows the step-by-step reverse diffusion process from noise to image.
-
-    Args:
-        images: list of CHW tensors (range roughly [-1, 1])
-        max_steps: cap the number of frames plotted (default 10)
+    Useful for understanding how the model generates images.
+    
+    For face-swapping: This will help visualize how faces emerge from noise,
+    showing the progression from random noise -> rough face shape -> detailed features.
     """
-    if not images:
-        print("No images to display.")
-        return
-
-    steps = min(len(images), max_steps if max_steps is not None else len(images))
-    fig, axes = plt.subplots(1, steps, figsize=(1.5 * steps, 3))
-    if steps == 1:
-        axes = [axes]
-
-    for i in range(steps):
-        ax = axes[i]
-        x = images[i].squeeze(0)  # (C,H,W)
-        x = rearrange(x, 'c h w -> h w c').detach().cpu().numpy()
-        x = (x + 1) / 2.0
-        x = np.clip(x, 0, 1)
+    fig, axes = plt.subplots(1, 10, figsize=(15, 3))  # Larger figure for face images
+    for i, ax in enumerate(axes.flat):
+        # Convert tensor to displayable format
+        x = images[i].squeeze(0)
+        x = rearrange(x, 'c h w -> h w c')  # Change from channels-first to channels-last
+        x = x.numpy()
+        
+        # Denormalize from [-1, 1] to [0, 1] for RGB display
+        x = (x + 1) / 2
+        x = np.clip(x, 0, 1)  # Ensure values are in valid range
+        
+        # Display RGB face image
         ax.imshow(x)
-        ax.axis('off')
-
-    plt.tight_layout()
+        ax.axis('off')  # Remove axis labels for cleaner visualization
     plt.show()
