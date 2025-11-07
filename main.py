@@ -117,7 +117,7 @@ def main():
         train(
             checkpoint_path=checkpoint_path,  # Where to save the trained model
             lr=1e-4,                         # How fast the AI learns (learning rate)
-            num_epochs=200,                  # How many times to go through all the data
+            num_epochs=2000,                  # How many times to go through all the data
             batch_size=8,                    # How many images to process at once
             max_dataset_size=max_pairs       # 🆕 How many pairs to train on
         )
