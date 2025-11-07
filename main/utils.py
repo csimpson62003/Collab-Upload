@@ -40,72 +40,62 @@ def set_seed(seed: int = 42):
 
 
 def setup_cuda_device(preferred_gpu: int = 0):
-    """
-    CUDA SETUP AND DEVICE SELECTION
-    ===============================
-    Sets up CUDA and selects the best available GPU device.
+    # """
+    # CUDA SETUP AND DEVICE SELECTION
+    # ===============================
+    # Sets up CUDA and selects the best available GPU device.
     
-    Args:
-        preferred_gpu: Which GPU to prefer (0 for first GPU, 1 for second, etc.)
-    Returns:
-        torch.device: The selected device (cuda:X or cpu)
-    """
-    print("=" * 50)
-    print("CUDA SETUP AND DETECTION")
-    print("=" * 50)
+    # Args:
+    #     preferred_gpu: Which GPU to prefer (0 for first GPU, 1 for second, etc.)
+    # Returns:
+    #     torch.device: The selected device (cuda:X or cpu)
+    # """
+    # print("=" * 50)
+    # print("CUDA SETUP AND DETECTION")
+    # print("=" * 50)
     
-    # Check CUDA availability
-    print(f"CUDA available: {torch.cuda.is_available()}")
+    # # Check CUDA availability
+    # print(f"CUDA available: {torch.cuda.is_available()}")
     
-    if not torch.cuda.is_available():
-        print("⚠️  CUDA not available! Using CPU instead.")
-        print("💡 To enable CUDA:")
-        print("   1. Make sure you have an NVIDIA GPU")
-        print("   2. Install CUDA drivers from NVIDIA")
-        print("   3. Install PyTorch with CUDA support:")
-        print("      pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
-        return torch.device("cpu")
+    # if not torch.cuda.is_available():
+    #     print("⚠️  CUDA not available! Using CPU instead.")
+    #     print("💡 To enable CUDA:")
+    #     print("   1. Make sure you have an NVIDIA GPU")
+    #     print("   2. Install CUDA drivers from NVIDIA")
+    #     print("   3. Install PyTorch with CUDA support:")
+    #     print("      pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
+    #     return torch.device("cpu")
     
-    # Display CUDA information
-    print(f"CUDA version: {torch.version.cuda}")
-    print(f"cuDNN version: {torch.backends.cudnn.version()}")
-    print(f"Number of GPUs available: {torch.cuda.device_count()}")
+    # # Display CUDA information
+    # print(f"CUDA version: {torch.version.cuda}")
+    # print(f"cuDNN version: {torch.backends.cudnn.version()}")
+    # print(f"Number of GPUs available: {torch.cuda.device_count()}")
     
-    # List all available GPUs
-    for i in range(torch.cuda.device_count()):
-        props = torch.cuda.get_device_properties(i)
-        memory_gb = props.total_memory / 1024**3
-        print(f"  GPU {i}: {props.name}")
-        print(f"    Memory: {memory_gb:.1f} GB")
-        print(f"    Compute Capability: {props.major}.{props.minor}")
+    # # List all available GPUs
+    # for i in range(torch.cuda.device_count()):
+    #     props = torch.cuda.get_device_properties(i)
+    #     memory_gb = props.total_memory / 1024**3
+    #     print(f"  GPU {i}: {props.name}")
+    #     print(f"    Memory: {memory_gb:.1f} GB")
+    #     print(f"    Compute Capability: {props.major}.{props.minor}")
     
-    # Select the best GPU
-    if preferred_gpu < torch.cuda.device_count():
-        selected_gpu = preferred_gpu
-    else:
-        # Default to GPU 0 if preferred GPU doesn't exist
-        selected_gpu = 0
-        print(f"⚠️  Preferred GPU {preferred_gpu} not available, using GPU {selected_gpu}")
+    # # Select the best GPU
+    # if preferred_gpu < torch.cuda.device_count():
+    #     selected_gpu = preferred_gpu
+    # else:
+    #     # Default to GPU 0 if preferred GPU doesn't exist
+    #     selected_gpu = 0
+    #     print(f"⚠️  Preferred GPU {preferred_gpu} not available, using GPU {selected_gpu}")
     
-    # Set the default GPU
-    torch.cuda.set_device(selected_gpu)
-    device = torch.device(f"cuda:{selected_gpu}")
+    # # Set the default GPU
+    # torch.cuda.set_device(selected_gpu)
+    # device = torch.device(f"cuda:{selected_gpu}")
     
-    print(f"✅ Selected GPU {selected_gpu}: {torch.cuda.get_device_name(selected_gpu)}")
-    print(f"   Device: {device}")
-    
-    # Test GPU with a simple operation
-    try:
-        test_tensor = torch.randn(100, 100).to(device)
-        result = test_tensor @ test_tensor.T
-        print(f"✅ GPU test successful! Tensor computation working on {device}")
-    except Exception as e:
-        print(f"❌ GPU test failed: {e}")
-        print("   Falling back to CPU")
-        return torch.device("cpu")
-    
-    print("=" * 50)
-    return device
+    # print(f"✅ Selected GPU {selected_gpu}: {torch.cuda.get_device_name(selected_gpu)}")
+    # print(f"   Device: {device}")
+   
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 
 def display_reverse(images: List):
